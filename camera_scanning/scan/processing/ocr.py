@@ -6,9 +6,64 @@ import os
 import time
 import numpy as np
 
-# contrast enhance, sharpen, threshold and blue image
-def enhance_image(image):
 
+def get_date_time_from_screen(file):
+
+	scans_dir = "scans/"
+	input_scan_path = scans_dir + file + "-result.jpg"
+	percentage_of_screen = 0.33
+
+	start_time = time.time()
+
+	image = cv2.imread(input_scan_path)
+
+	# Get height and width of image
+	height, width, _ = image.shape
+
+	# startY, endY, startX, endX
+	# Crop top percentage of screen 
+	image = image[0:int(height * percentage_of_screen), 0:width]
+
+
+	# """
+	# Test write for contour output
+
+	# """
+	# print "screen contour found"
+	# test_dir = "test-images/"
+	# # contours_copy = contours.copy()
+	# ocr_output_file = test_dir + file + "-ocr.jpg"
+	# cv2.imwrite(ocr_output_file, image)	
+
+	enhanced = enhance_image(image, file)
+
+	# """
+	# Test write for contour output
+
+	# """
+	# print "screen contour found"
+	# test_dir = "test-images/"
+	# # contours_copy = contours.copy()
+	# ocr_output_file = test_dir + file + "-ocrafterprocessing.jpg"
+	# cv2.imwrite(ocr_output_file, enhanced)	
+ 
+	# temp file for OCR operation
+	temp_file = "{}.jpg".format(os.getpid())
+	cv2.imwrite(temp_file, enhanced)
+
+	text = pytesseract.image_to_string(Image.open(temp_file))
+	os.remove(temp_file)
+
+	ret, date_result, time_result = verify_date_time(text)
+
+	if ret:
+		return True, date_result, time_result
+	else:
+		return False, date_result, time_result
+
+
+# contrast enhance, sharpen, threshold and blur image
+def enhance_image(image, file):
 
 	kernel = np.array([[-1,-1,-1,-1,-1],
 						[-1,2,2,2,-1],
@@ -31,38 +86,14 @@ def enhance_image(image):
 
 	return image_blur
 
-def get_time(file):
+def verify_date_time(text):
 
-	scans_dir = "scans/"
-	input_scan_path = scans_dir + file + "-result.jpg"
-	percentage_of_screen = 0.33
+	date, time = text.split("\n")
 
-	start_time = time.time()
+	date_found, date_result = clean_and_verify_date(date) 
+	time_found, time_result = clean_and_verify_time(time)
 
-	image = cv2.imread(input_scan_path)
-
-
-	# Get height and width of image
-	height, width, _ = image.shape
-
-	# startY, endY, startX, endX
-	# Crop top percentage of screen 
-	image = image[0:int(height * percentage_of_screen), 0:width]
-
-	enhanced = enhance_image(image)
- 
-	# temp file for OCR operation
-	temp_file = "{}.jpg".format(os.getpid())
-	cv2.imwrite(temp_file, enhanced)
-
-	text = pytesseract.image_to_string(Image.open(temp_file))
-	os.remove(temp_file)
-
-	ret, date_result, time_result = verify_date_time(text)
-
-	print "--- OCR: %s seconds ---" % (time.time() - start_time)
-
-	if ret:
+	if date_found and time_found:
 		return True, date_result, time_result
 	else:
 		return False, date_result, time_result
@@ -102,6 +133,7 @@ def get_length_and_date(date):
 		day = int(date[0:2])
 		month = int(date[3:5])
 		year = int(date[6:length])
+
 	except ValueError:
 
 		print "Error parsing"
@@ -118,6 +150,8 @@ def is_time_valid(input_time):
 	else: 
 		return False
 
+
+# Checks if the date is in format DD/MM/YYYY
 def is_date_valid(input_date):
 	
 	day, month, year, length = get_length_and_date(input_date)
@@ -128,7 +162,7 @@ def is_date_valid(input_date):
 		return False
 
 
-
+# Replaces any potential wrong special characters in the time
 def clean_and_verify_time(input_time):
 
 	if is_time_valid(input_time):
@@ -152,7 +186,7 @@ def clean_and_verify_time(input_time):
 
 		if is_time_valid(result_time):
 
-			print "After:" + result_time
+			# print "After:" + result_time
 			return True, result_time
 		else:
 			return False, result_time
@@ -183,6 +217,9 @@ def clean_and_verify_date(input_date):
 			return False, result_date
 
 
+
+# Replaces and potential incorrect characters picked up by the
+# OCR into numbers they should be 
 def replace_characters_for_digits(input_string):
 
 	result = input_string
@@ -202,16 +239,3 @@ def replace_characters_for_digits(input_string):
 		result = result.replace(key, value)
 
 	return result 
-
-
-def verify_date_time(text):
-
-	date, time = text.split("\n")
-
-	date_found, date_result = clean_and_verify_date(date) 
-	time_found, time_result = clean_and_verify_time(time)
-
-	if date_found and time_found:
-		return True, date_result, time_result
-	else:
-		return False, date_result, time_result
